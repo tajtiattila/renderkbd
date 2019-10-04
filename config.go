@@ -9,11 +9,6 @@ type LabelSpec struct {
 }
 
 type Config struct {
-	Font struct {
-		Family string
-		Weight int
-	}
-
 	Source struct {
 		Path string // source path
 
@@ -22,12 +17,16 @@ type Config struct {
 	}
 
 	Render struct {
+		Font string // font to use for rendering
+
 		Image string // destination image path
 
 		Dx int // horizontal size of 1u key in pixels
 		Dy int // vertical size of 1u key in pixels
 
 		KeyBorder int // key border in pixels
+		HPad      int // horizontal padding inside border
+		VPad      int // vertical padding inside border
 
 		ImageBorder int // image border in pixels
 

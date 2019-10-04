@@ -47,10 +47,11 @@ func main() {
 		}
 	}
 
-	nzd(&conf.Font.Weight, 400)
 	nzd(&conf.Render.Dx, 64)
 	nzd(&conf.Render.Dy, 64)
 	nzd(&conf.Render.KeyBorder, 2)
+	nzd(&conf.Render.HPad, 2)
+	nzd(&conf.Render.VPad, 2)
 	nzd(&conf.Render.ImageBorder, 32)
 	nzd(&conf.Render.FontHeight, 12)
 

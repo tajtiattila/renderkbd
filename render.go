@@ -4,16 +4,13 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"image/draw"
 	"image/png"
 	"log"
 	"math"
 	"os"
 	"strings"
 
-	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
-	"github.com/tajtiattila/beermap/googlefont"
 	"github.com/tajtiattila/qmk-keymaps/renderkbd/keymapc"
 	"golang.org/x/image/font"
 )
@@ -62,17 +59,10 @@ func render(conf Config, src []keymapc.Keymap) error {
 }
 
 func (r *renderer) loadFont() error {
-	fc := r.conf.Font
-	fontdata, err := googlefont.Get(fc.Family, fc.Weight)
-	if err != nil {
-		return fmt.Errorf("Get font: %w", err)
-	}
+	var err error
+	r.font, err = loadFont(r.conf.Render.Font)
 
-	r.font, err = freetype.ParseFont(fontdata)
-	if err != nil {
-		return fmt.Errorf("Parse font: %w", err)
-	}
-	return nil
+	return err
 }
 
 func (r *renderer) initImage() {
@@ -176,14 +166,31 @@ func (r *renderer) drawKeyLabels(l LabelSpec, km keymapc.Keymap) {
 		l.Scale = 1
 	}
 
-	fc := freetype.NewContext()
-	fc.SetDPI(96)
-	fc.SetFont(r.font)
-	fc.SetFontSize(float64(r.conf.Render.FontHeight) * l.Scale)
-	fc.SetHinting(font.HintingFull)
-	fc.SetSrc(image.NewUniform(color.RGBA{0, 0, 0, 0xFF}))
+	lc := labelCtx{
+		dst: r.im,
+		src: image.NewUniform(color.RGBA{0, 0, 0, 0xFF}),
+		face: truetype.NewFace(r.font, &truetype.Options{
+			Size:    float64(r.conf.Render.FontHeight) * l.Scale,
+			DPI:     96,
+			Hinting: font.HintingFull,
+		}),
+	}
 
-	b := r.conf.Render.KeyBorder * 3 / 2
+	if strings.HasPrefix(l.Position, "top") {
+		lc.valign = -1
+	} else if strings.HasPrefix(l.Position, "bottom") {
+		lc.valign = 1
+	}
+
+	if strings.HasSuffix(l.Position, "left") {
+		lc.halign = -1
+	} else if strings.HasSuffix(l.Position, "right") {
+		lc.halign = 1
+	}
+
+	rc := r.conf.Render
+	hp := rc.KeyBorder + rc.HPad
+	vp := rc.KeyBorder + rc.VPad
 
 KeyLoop:
 	for _, k := range km.Keys {
@@ -202,46 +209,13 @@ KeyLoop:
 			}
 		}
 
-		tr := textRect(fc, label)
-
 		p0 := r.pt(k.X, k.Y)
 		p1 := r.pt(k.X+k.Dx, k.Y+k.Dy)
 
-		lr := image.Rect(p0.X+b, p0.Y+b, p1.X-b, p1.Y-b)
+		lr := image.Rect(p0.X+hp, p0.Y+vp, p1.X-hp, p1.Y-vp)
 
-		p := adjustText(l.Position, tr, lr)
-
-		// destination needs to be set before painting
-		// because textRect resets it
-		fc.SetDst(r.im)
-		fc.SetClip(lr)
-
-		fc.DrawString(label, freetype.Pt(p.X, p.Y))
+		lc.drawString(lr, label)
 	}
-}
-
-func adjustText(rel string, tr, lr image.Rectangle) image.Point {
-
-	lc := rectCenter(lr)
-	tc := rectCenter(tr)
-
-	// default is fully centered
-	x := lc.X - tc.X
-	y := lc.Y - tc.Y
-
-	if strings.HasPrefix(rel, "top") {
-		y = lr.Min.Y - tr.Min.Y
-	} else if strings.HasPrefix(rel, "bottom") {
-		y = lr.Max.Y - tr.Max.Y
-	}
-
-	if strings.HasSuffix(rel, "left") {
-		x = lr.Min.X - tr.Min.X
-	} else if strings.HasSuffix(rel, "right") {
-		x = lr.Max.X - tr.Max.X
-	}
-
-	return image.Pt(x, y)
 }
 
 func (r *renderer) pt(kx, ky int) image.Point {
@@ -253,40 +227,3 @@ func (r *renderer) pt(kx, ky int) image.Point {
 
 	return image.Pt(x, y)
 }
-
-func textRect(c *freetype.Context, s string) image.Rectangle {
-	const d = 1024
-	im := &dimImage{
-		bounds: image.Rect(-d, -d, d, d),
-	}
-	c.SetDst(im)
-	c.SetClip(im.Bounds())
-	c.DrawString(s, freetype.Pt(0, 0))
-	return im.dirty
-}
-
-func rectCenter(r image.Rectangle) image.Point {
-	x := (r.Min.X + r.Max.X) / 2
-	y := (r.Min.Y + r.Max.Y) / 2
-	return image.Pt(x, y)
-}
-
-// dimImage accumulates painted pixel positions
-type dimImage struct {
-	bounds image.Rectangle
-
-	// dirty is the rectangle of painted pixels
-	dirty image.Rectangle
-}
-
-func (im *dimImage) Bounds() image.Rectangle { return im.bounds }
-func (im *dimImage) ColorModel() color.Model { return color.RGBAModel }
-func (im *dimImage) At(x, y int) color.Color { return color.White }
-
-func (im *dimImage) Set(x, y int, c color.Color) {
-	//fmt.Println(x, y, c)
-	r := image.Rect(x, y, x+1, y+1)
-	im.dirty = im.dirty.Union(r)
-}
-
-var _ draw.Image = &dimImage{}
