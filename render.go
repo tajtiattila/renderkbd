@@ -21,6 +21,8 @@ type renderer struct {
 
 	font *truetype.Font
 
+	faceMap map[string]font.Face
+
 	sx, sy int // top left of source keymaps
 
 	im *image.RGBA
@@ -32,7 +34,7 @@ func render(conf Config, src []keymapc.Keymap) error {
 		keymap: src,
 	}
 
-	if err := r.loadFont(); err != nil {
+	if err := r.loadFonts(); err != nil {
 		return err
 	}
 
@@ -58,9 +60,36 @@ func render(conf Config, src []keymapc.Keymap) error {
 	return png.Encode(f, r.im)
 }
 
-func (r *renderer) loadFont() error {
+func (r *renderer) loadFonts() error {
 	var err error
 	r.font, err = loadFont(r.conf.Render.Font)
+	if err != nil {
+		return fmt.Errorf("Load main font: %w", err)
+	}
+
+	for _, fs := range r.conf.FontMap {
+		f, err := loadFont(fs.Font)
+		if err != nil {
+			return fmt.Errorf("Load font: %w", err)
+		}
+
+		if fs.Scale == 0 {
+			fs.Scale = 1
+		}
+
+		face := truetype.NewFace(f, &truetype.Options{
+			Size:    float64(r.conf.Render.FontHeight) * fs.Scale,
+			DPI:     float64(r.conf.DPI),
+			Hinting: font.HintingFull,
+		})
+
+		for _, l := range fs.Labels {
+			if r.faceMap == nil {
+				r.faceMap = make(map[string]font.Face)
+			}
+			r.faceMap[l] = face
+		}
+	}
 
 	return err
 }
@@ -142,8 +171,15 @@ func (r *renderer) mainKeymap() keymapc.Keymap {
 
 func (r *renderer) drawKeyShapes(km keymapc.Keymap) {
 	b := r.conf.Render.KeyBorder
-	c := color.Gray{0xdd}
 	for _, k := range km.Keys {
+
+		label := k.Label
+		if x, ok := r.conf.Remap[label]; ok {
+			label = x
+		}
+
+		c := r.keyColor(label)
+
 		p0 := r.pt(k.X, k.Y)
 		p0.X += b
 		p0.Y += b
@@ -161,17 +197,29 @@ func (r *renderer) drawKeyShapes(km keymapc.Keymap) {
 	}
 }
 
+func (r *renderer) keyColor(label string) color.Color {
+	if c, ok := r.conf.KeyColor[label]; ok {
+		return c.C
+	}
+	return color.Gray{0xdd}
+}
+
 func (r *renderer) drawKeyLabels(l LabelSpec, km keymapc.Keymap) {
 	if l.Scale == 0 {
 		l.Scale = 1
 	}
 
+	c := l.Color.C
+	if c == nil {
+		c = color.RGBA{0, 0, 0, 0xFF}
+	}
+
 	lc := labelCtx{
 		dst: r.im,
-		src: image.NewUniform(color.RGBA{0, 0, 0, 0xFF}),
+		src: image.NewUniform(c),
 		face: truetype.NewFace(r.font, &truetype.Options{
 			Size:    float64(r.conf.Render.FontHeight) * l.Scale,
-			DPI:     96,
+			DPI:     float64(r.conf.DPI),
 			Hinting: font.HintingFull,
 		}),
 	}
@@ -209,12 +257,17 @@ KeyLoop:
 			}
 		}
 
+		lcx := lc
+		if face, ok := r.faceMap[label]; ok {
+			lcx.face = face
+		}
+
 		p0 := r.pt(k.X, k.Y)
 		p1 := r.pt(k.X+k.Dx, k.Y+k.Dy)
 
 		lr := image.Rect(p0.X+hp, p0.Y+vp, p1.X-hp, p1.Y-vp)
 
-		lc.drawString(lr, label)
+		lcx.drawString(lr, label)
 	}
 }
 

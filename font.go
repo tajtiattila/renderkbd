@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -62,11 +63,19 @@ func loadGoogleFontData(spec string) ([]byte, error) {
 }
 
 func loadLocalFontData(name string) ([]byte, error) {
-	p := filepath.Join("C:/Windows/Fonts", name+".ttf")
-	fontdata, err := ioutil.ReadFile(p)
-	if err != nil {
-		return nil, fmt.Errorf("Read font: %w", err)
+	var fontPaths = []string{
+		os.ExpandEnv("$LOCALAPPDATA/Microsoft/Windows/Fonts"),
+		"C:/Windows/Fonts",
 	}
 
-	return fontdata, nil
+	var err error
+	for _, d := range fontPaths {
+		var fontdata []byte
+		fontdata, err = ioutil.ReadFile(filepath.Join(d, name+".ttf"))
+		if err == nil {
+			return fontdata, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Read font: %w", err)
 }

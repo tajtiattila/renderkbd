@@ -47,6 +47,7 @@ func main() {
 		}
 	}
 
+	nzd(&conf.DPI, 96)
 	nzd(&conf.Render.Dx, 64)
 	nzd(&conf.Render.Dy, 64)
 	nzd(&conf.Render.KeyBorder, 2)
