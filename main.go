@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/tajtiattila/qmk-keymaps/renderkbd/keymapc"
@@ -32,13 +33,8 @@ func main() {
 	conf.Source.Path = filepath.Join(filepath.Dir(confp), conf.Source.Path)
 
 	if conf.Render.Image == "" {
-		a, err := filepath.Abs(confp)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		d := filepath.Dir(a)
-		conf.Render.Image = filepath.Join(d, filepath.Base(d)+".png")
+		x := strings.TrimSuffix(confp, ".toml")
+		conf.Render.Image = x + ".png"
 	}
 
 	nzd := func(p *int, def int) {
